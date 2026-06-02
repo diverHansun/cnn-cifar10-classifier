@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from datetime import datetime
 import json
 import random
+import time
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,15 @@ from config import CLASS_NAMES, TrainConfig, select_device
 
 
 DEFAULT_BEST_CHECKPOINT_NAME = "best_model.pth"
+BASE_HISTORY_KEYS = ("train_loss", "train_acc", "val_loss", "val_acc")
+RUNTIME_HISTORY_KEYS = (
+    "learning_rate",
+    "best_accuracy",
+    "epoch_time_sec",
+    "images_per_second",
+    "gpu_memory_allocated_mb",
+    "gpu_memory_reserved_mb",
+)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -113,6 +123,42 @@ def create_grad_scaler(torch_module: Any, enabled: bool):
         return torch_module.cuda.amp.GradScaler(enabled=enabled)
 
 
+def ensure_history_fields(history: dict[str, list], epoch_count: int) -> dict[str, list]:
+    for key in BASE_HISTORY_KEYS:
+        history.setdefault(key, [])
+    for key in RUNTIME_HISTORY_KEYS:
+        values = history.setdefault(key, [])
+        if len(values) < epoch_count:
+            values.extend([None] * (epoch_count - len(values)))
+    return history
+
+
+def empty_history() -> dict[str, list]:
+    return ensure_history_fields({}, epoch_count=0)
+
+
+def unpack_batch(batch):
+    images, labels = batch[:2]
+    return images, labels
+
+
+def current_learning_rate(optimizer) -> float:
+    return float(optimizer.param_groups[0]["lr"])
+
+
+def reset_gpu_peak_memory(torch_module: Any, device: str) -> None:
+    if device == "cuda":
+        torch_module.cuda.reset_peak_memory_stats()
+
+
+def collect_gpu_memory_mb(torch_module: Any, device: str) -> tuple[float, float]:
+    if device != "cuda":
+        return 0.0, 0.0
+    allocated = torch_module.cuda.max_memory_allocated() / (1024**2)
+    reserved = torch_module.cuda.max_memory_reserved() / (1024**2)
+    return allocated, reserved
+
+
 def train_one_epoch(model, loader, criterion, optimizer, scaler, device: str, use_amp: bool, epoch: int):
     import torch
     from tqdm import tqdm
@@ -123,7 +169,8 @@ def train_one_epoch(model, loader, criterion, optimizer, scaler, device: str, us
     total_seen = 0
 
     progress = tqdm(loader, desc=f"train epoch {epoch + 1}", leave=False)
-    for images, labels in progress:
+    for batch in progress:
+        images, labels = unpack_batch(batch)
         images = images.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
 
@@ -156,7 +203,8 @@ def validate_one_epoch(model, loader, criterion, device: str, use_amp: bool):
 
     with torch.no_grad():
         progress = tqdm(loader, desc="validate", leave=False)
-        for images, labels in progress:
+        for batch in progress:
+            images, labels = unpack_batch(batch)
             images = images.to(device, non_blocking=True)
             labels = labels.to(device, non_blocking=True)
             with autocast_context(torch, use_amp):
@@ -262,7 +310,7 @@ def main() -> None:
 
     start_epoch = 0
     best_acc = 0.0
-    history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": []}
+    history = empty_history()
 
     if checkpoint is not None:
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -271,7 +319,7 @@ def main() -> None:
             scaler.load_state_dict(checkpoint["scaler_state_dict"])
         start_epoch = int(checkpoint.get("epoch", -1)) + 1
         best_acc = float(checkpoint.get("best_acc", 0.0))
-        history = checkpoint.get("history", history)
+        history = ensure_history_fields(checkpoint.get("history", history), start_epoch)
         print(f"resumed from {args.resume} at epoch {start_epoch}")
 
     run_name = f"cifar10_cnn_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -285,26 +333,52 @@ def main() -> None:
 
     try:
         for epoch in range(start_epoch, cfg.epochs):
+            if device == "cuda":
+                torch.cuda.synchronize()
+            reset_gpu_peak_memory(torch, device)
+            epoch_start = time.perf_counter()
+
             train_loss, train_acc = train_one_epoch(
                 model, train_loader, criterion, optimizer, scaler, device, use_amp, epoch
             )
             val_loss, val_acc = validate_one_epoch(
                 model, test_loader, criterion, device, use_amp
             )
+            if device == "cuda":
+                torch.cuda.synchronize()
+
+            epoch_time_sec = time.perf_counter() - epoch_start
+            images_seen = len(train_loader.dataset) + len(test_loader.dataset)
+            images_per_second = images_seen / max(epoch_time_sec, 1e-9)
+            learning_rate = current_learning_rate(optimizer)
+            gpu_memory_allocated_mb, gpu_memory_reserved_mb = collect_gpu_memory_mb(torch, device)
 
             history["train_loss"].append(train_loss)
             history["train_acc"].append(train_acc)
             history["val_loss"].append(val_loss)
             history["val_acc"].append(val_acc)
 
+            is_best = val_acc > best_acc
+            if is_best:
+                best_acc = val_acc
+
+            history["learning_rate"].append(learning_rate)
+            history["best_accuracy"].append(best_acc)
+            history["epoch_time_sec"].append(epoch_time_sec)
+            history["images_per_second"].append(images_per_second)
+            history["gpu_memory_allocated_mb"].append(gpu_memory_allocated_mb)
+            history["gpu_memory_reserved_mb"].append(gpu_memory_reserved_mb)
+
             writer.add_scalar("loss/train", train_loss, epoch)
             writer.add_scalar("loss/test", val_loss, epoch)
             writer.add_scalar("accuracy/train", train_acc, epoch)
             writer.add_scalar("accuracy/test", val_acc, epoch)
-
-            is_best = val_acc > best_acc
-            if is_best:
-                best_acc = val_acc
+            writer.add_scalar("accuracy/best", best_acc, epoch)
+            writer.add_scalar("learning_rate", learning_rate, epoch)
+            writer.add_scalar("performance/epoch_time_sec", epoch_time_sec, epoch)
+            writer.add_scalar("performance/images_per_second", images_per_second, epoch)
+            writer.add_scalar("gpu/memory_allocated_mb", gpu_memory_allocated_mb, epoch)
+            writer.add_scalar("gpu/memory_reserved_mb", gpu_memory_reserved_mb, epoch)
 
             save_checkpoint(
                 cfg.last_checkpoint_path,
@@ -331,7 +405,10 @@ def main() -> None:
             print(
                 f"epoch {epoch + 1}/{cfg.epochs} "
                 f"train_loss={train_loss:.4f} train_acc={train_acc:.4f} "
-                f"test_loss={val_loss:.4f} test_acc={val_acc:.4f} best={best_acc:.4f}"
+                f"test_loss={val_loss:.4f} test_acc={val_acc:.4f} "
+                f"best={best_acc:.4f} lr={learning_rate:.6g} "
+                f"time={epoch_time_sec:.1f}s ips={images_per_second:.1f} "
+                f"gpu_alloc={gpu_memory_allocated_mb:.0f}MB gpu_reserved={gpu_memory_reserved_mb:.0f}MB"
             )
     finally:
         writer.close()

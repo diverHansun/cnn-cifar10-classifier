@@ -23,6 +23,9 @@ cnn-cifar10-classifier/
 |-- evaluate.py
 |-- predict.py
 |-- demo.py
+|-- metrics.py
+|-- visualize.py
+|-- report.py
 |-- checkpoints/
 |   |-- best_model.pth
 |   `-- last_model.pth
@@ -30,8 +33,27 @@ cnn-cifar10-classifier/
 |   `-- hf_cache/
 |-- outputs/
 |   |-- training_curves.png
-|   |-- confusion_matrix.png
-|   `-- demo_predictions.png
+|   |-- training_metrics.json
+|   |-- eval/
+|   |   |-- eval_report.md
+|   |   |-- eval_summary.json
+|   |   |-- predictions.csv
+|   |   |-- per_class_metrics.csv
+|   |   |-- top_confusions.csv
+|   |   |-- confusion_matrix.png
+|   |   |-- confusion_matrix_normalized.png
+|   |   |-- per_class_precision.png
+|   |   |-- per_class_recall.png
+|   |   |-- per_class_f1.png
+|   |   |-- top_confusions.png
+|   |   |-- confidence_histogram.png
+|   |   |-- error_samples.png
+|   |   |-- high_confidence_errors.png
+|   |   `-- low_confidence_corrects.png
+|   `-- demo/
+|       |-- demo_random.png
+|       |-- demo_errors.png
+|       `-- demo_confusion_cat_to_dog.png
 |-- runs/
 |-- demo_images/
 |-- tests/
@@ -95,6 +117,22 @@ Dataset files are cached under `datasets/hf_cache/`. Model weights are saved und
 
 The checkpoint is a dictionary with model weights, optimizer state, AMP scaler state, epoch, best accuracy, class names, config, and history. `.pth` files are generated artifacts and are not committed to Git. A fresh clone must train first, or you must provide an existing checkpoint path with `--checkpoint`.
 
+Monitor training with TensorBoard:
+
+```bash
+tensorboard --logdir runs --host 0.0.0.0 --port 8080
+```
+
+The training script logs train/test loss, train/test accuracy, best accuracy, learning rate, epoch time, images per second, and GPU memory peaks. On Vast.ai, keep the SSH tunnel mapping `-L 8080:localhost:8080`, then open `http://localhost:8080` on your local machine.
+
+## Download Published Weights
+
+If you want to evaluate the latest published checkpoint without retraining:
+
+```bash
+hf download diverWayne/cnn-cifar10-classifier checkpoints/best_model.pth --type model --local-dir .
+```
+
 ## Evaluate
 
 Evaluation requires a trained checkpoint:
@@ -106,8 +144,24 @@ python evaluate.py --checkpoint checkpoints/best_model.pth --device cuda
 This saves:
 
 ```text
-outputs/confusion_matrix.png
+outputs/eval/eval_report.md
+outputs/eval/eval_summary.json
+outputs/eval/predictions.csv
+outputs/eval/per_class_metrics.csv
+outputs/eval/top_confusions.csv
+outputs/eval/confusion_matrix.png
+outputs/eval/confusion_matrix_normalized.png
+outputs/eval/per_class_precision.png
+outputs/eval/per_class_recall.png
+outputs/eval/per_class_f1.png
+outputs/eval/top_confusions.png
+outputs/eval/confidence_histogram.png
+outputs/eval/error_samples.png
+outputs/eval/high_confidence_errors.png
+outputs/eval/low_confidence_corrects.png
 ```
+
+The Markdown report is generated in Chinese by default. It explains accuracy, precision, recall, F1, Macro F1, Weighted F1, Top-3 accuracy, loss, confidence, confusion pairs, and representative error samples.
 
 ## Predict One Image
 
@@ -121,13 +175,37 @@ python predict.py --image demo_images/your_image.png --checkpoint checkpoints/be
 ## Demo Predictions
 
 ```bash
-python demo.py --checkpoint checkpoints/best_model.pth --samples 16 --device cuda
+python demo.py --mode random --samples 24
 ```
 
 This saves:
 
 ```text
-outputs/demo_predictions.png
+outputs/demo/demo_random.png
+```
+
+`demo.py` reads `outputs/eval/predictions.csv`, so run `evaluate.py` first. It does not need to run inference again.
+
+Useful demo modes:
+
+```bash
+python demo.py --mode random --seed 42
+python demo.py --mode errors
+python demo.py --mode high-confidence-errors
+python demo.py --mode low-confidence-corrects
+python demo.py --mode confusion --true-label cat --pred-label dog
+python demo.py --mode class --class-name cat
+```
+
+Demo filenames follow the selected mode:
+
+```text
+outputs/demo/demo_random.png
+outputs/demo/demo_errors.png
+outputs/demo/demo_high_confidence_errors.png
+outputs/demo/demo_low_confidence_corrects.png
+outputs/demo/demo_confusion_<true>_to_<pred>.png
+outputs/demo/demo_class_<class>.png
 ```
 
 ## Local Checks

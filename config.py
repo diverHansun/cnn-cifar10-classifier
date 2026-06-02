@@ -54,18 +54,28 @@ class TrainConfig:
         return self.output_dir / "training_curves.png"
 
     @property
+    def eval_output_dir(self) -> Path:
+        return self.output_dir / "eval"
+
+    @property
+    def demo_output_dir(self) -> Path:
+        return self.output_dir / "demo"
+
+    @property
     def confusion_matrix_path(self) -> Path:
-        return self.output_dir / "confusion_matrix.png"
+        return self.eval_output_dir / "confusion_matrix.png"
 
     @property
     def demo_predictions_path(self) -> Path:
-        return self.output_dir / "demo_predictions.png"
+        return self.demo_output_dir / "demo_random.png"
 
     def ensure_directories(self) -> None:
         for path in (
             self.data_dir,
             self.checkpoint_dir,
             self.output_dir,
+            self.eval_output_dir,
+            self.demo_output_dir,
             self.run_dir,
             PROJECT_ROOT / "demo_images",
         ):
