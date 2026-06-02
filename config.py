@@ -36,7 +36,7 @@ class TrainConfig:
     use_amp: bool = True
     augment: bool = True
     pin_memory: bool = True
-    data_dir: Path = PROJECT_ROOT / "data"
+    data_dir: Path = PROJECT_ROOT / "datasets"
     checkpoint_dir: Path = PROJECT_ROOT / "checkpoints"
     output_dir: Path = PROJECT_ROOT / "outputs"
     run_dir: Path = PROJECT_ROOT / "runs"

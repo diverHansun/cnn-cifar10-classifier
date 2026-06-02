@@ -18,6 +18,7 @@ class StaticProjectContractTests(unittest.TestCase):
             "demo.py",
             "requirements.txt",
             "README.md",
+            "datasets/.gitkeep",
         ]
 
         for relative_path in expected_files:
@@ -87,6 +88,13 @@ class StaticProjectContractTests(unittest.TestCase):
         source = (ROOT / "demo.py").read_text(encoding="utf-8")
 
         self.assertIn("if samples < 1", source)
+
+    def test_gitignore_keeps_dataset_folder_but_not_cached_data(self):
+        source = (ROOT / ".gitignore").read_text(encoding="utf-8")
+
+        self.assertIn("datasets/*", source)
+        self.assertIn("!datasets/.gitkeep", source)
+        self.assertNotIn("data/", source)
 
 
 if __name__ == "__main__":

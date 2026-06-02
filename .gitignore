@@ -7,7 +7,8 @@ __pycache__/
 venv/
 env/
 
-data/
+datasets/*
+!datasets/.gitkeep
 .cache/
 
 checkpoints/*

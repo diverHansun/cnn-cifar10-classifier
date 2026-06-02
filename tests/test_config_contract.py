@@ -11,6 +11,7 @@ class ConfigContractTests(unittest.TestCase):
         self.assertEqual(cfg.dataset_name, "uoft-cs/cifar10")
         self.assertEqual(cfg.dataset_config, "plain_text")
         self.assertEqual(cfg.device, "auto")
+        self.assertEqual(cfg.data_dir.name, "datasets")
         self.assertEqual(cfg.checkpoint_dir.name, "checkpoints")
         self.assertEqual(cfg.output_dir.name, "outputs")
         self.assertEqual(cfg.run_dir.name, "runs")

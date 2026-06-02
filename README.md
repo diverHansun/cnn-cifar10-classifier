@@ -16,7 +16,10 @@ cnn-cifar10-classifier/
 |-- predict.py
 |-- demo.py
 |-- checkpoints/
-|   `-- best_model.pth
+|   |-- best_model.pth
+|   `-- last_model.pth
+|-- datasets/
+|   `-- hf_cache/
 |-- outputs/
 |   |-- training_curves.png
 |   |-- confusion_matrix.png
@@ -74,10 +77,13 @@ Training writes:
 ```text
 checkpoints/best_model.pth
 checkpoints/last_model.pth
+datasets/hf_cache/
 outputs/training_curves.png
 outputs/training_metrics.json
 runs/cifar10_cnn_YYYYMMDD_HHMMSS/
 ```
+
+Dataset files are cached under `datasets/hf_cache/`. Model weights are saved under `checkpoints/`: `best_model.pth` is the best validation checkpoint, and `last_model.pth` is the latest epoch checkpoint for resume.
 
 The checkpoint is a dictionary with model weights, optimizer state, AMP scaler state, epoch, best accuracy, class names, config, and history. `.pth` files are generated artifacts and are not committed to Git. A fresh clone must train first, or you must provide an existing checkpoint path with `--checkpoint`.
 
