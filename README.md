@@ -4,6 +4,14 @@ A small PyTorch CNN project for CIFAR-10 image classification using the Hugging 
 
 The v0.1.0 goal is intentionally simple: hand-write a CNN, train it end to end, save `.pth` checkpoints, and generate report-friendly evaluation figures. ResNet and AdamW are planned as later comparison versions.
 
+## v0.1.0 Release
+
+The trained v0.1.0 baseline checkpoint and report artifacts are published on Hugging Face:
+
+https://huggingface.co/diverWayne/cnn-cifar10-classifier
+
+v0.1.0 reached `0.7857` test accuracy on the `uoft-cs/cifar10` `plain_text` test split. The Hugging Face release includes `best_model.pth`, `last_model.pth`, training metrics, training curves, a confusion matrix, demo predictions, logs, a TensorBoard event file, and a checksum manifest.
+
 ## Project Layout
 
 ```text
@@ -135,7 +143,7 @@ Real training/evaluation requires the server dependencies above.
 
 ## Version Roadmap
 
-- v0.1.0: simple hand-written CNN, SGD momentum baseline, `.pth` checkpoints.
+- v0.1.0: released simple hand-written CNN, SGD momentum baseline, `.pth` checkpoints.
 - v0.1.1: richer plots, wrong-sample inspection, report refinements.
 - v0.2.0: AdamW and learning-rate schedule comparison.
 - v0.3.0: CIFAR-style ResNet comparison.
