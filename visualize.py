@@ -13,6 +13,7 @@ def _prepare_matplotlib():
 
     plt.rcParams["font.sans-serif"] = [
         "Noto Sans CJK SC",
+        "Noto Sans CJK JP",
         "Microsoft YaHei",
         "SimHei",
         "Arial Unicode MS",
